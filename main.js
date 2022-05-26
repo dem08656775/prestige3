@@ -14,6 +14,19 @@ let data = {
 			}
 		}
 		return a;
+	})(),
+	boughts: (()=>{
+		let a=[];
+		for (let x = 0; x < 10; x++) {
+			a[x] = [];
+			for (let y = 0; y < 10; y++) {
+				a[x][y] = [];
+				for (let z = 0; z < 10; z++) {
+					a[x][y][z] = 0;
+				}
+			}
+		}
+		return a;
 	})()
 };
 
@@ -50,7 +63,21 @@ function resetCheck() {
                     }
                 }
                 return a;
-            })()
+            })(),
+						boughts: (()=>{
+                let a=[];
+                for (let x = 0; x < 10; x++) {
+                    a[x] = [];
+                    for (let y = 0; y < 10; y++) {
+                        a[x][y] = [];
+                        for (let z = 0; z < 10; z++) {
+                            a[x][y][z] = 0;
+                        }
+                    }
+                }
+                return a;
+            })(),
+
         };
         localStorage.removeItem("RESET_3");
     }
@@ -69,23 +96,23 @@ function getPPBonus() {
     return 1;
 }
 
-function getGain() {
+function getGain(a,b,c) {
 	let gain = 1;
-	for (let x = 0; x < 10; x++) {
-		for (let y = 0; y < 10; y++) {
-			for (let z = 0; z < 10; z++) {
-				gain *= data.prestiges[x][y][z]+1;
+	for (let x = a; x < 10; x++) {
+		for (let y = b; y < 10; y++) {
+			for (let z = c; z < 10; z++) {
+				if(x+y+z!=a+b+c)gain *= data.prestiges[x][y][z]+1;
 			}
 		}
 	}
-	return gain*metaBonus*getPPBonus();
+	return (gain-1)*metaBonus*getPPBonus();
 }
 
 function getRequirement(x,y,z) {
 	if (x===0 && y===0 && z===0) {
-		return Math.floor(Math.pow(1.5,data.prestiges[0][0][0])*10);
+		return Math.floor(Math.pow(1.5,data.boughts[0][0][0])*10);
 	} else {
-		return Math.pow((x+y+z+1),(data.prestiges[x][y][z]+1));
+		return Math.pow((x+y+z+1),(data.boughts[x][y][z]+1));
 	}
 }
 
@@ -94,9 +121,9 @@ function canActivatePrestige(x,y,z) {
 		return (data.coins >= getRequirement(x,y,z));
 	}
 	if (
-		(x!==0 && data.prestiges[x-1][y][z] >= getRequirement(x,y,z)) ||
-		(y!==0 && data.prestiges[x][y-1][z] >= getRequirement(x,y,z)) ||
-		(z!==0 && data.prestiges[x][y][z-1] >= getRequirement(x,y,z))
+		(x==0 || data.boughts[x-1][y][z] >= getRequirement(x,y,z)) &&
+		(y==0 || data.boughts[x][y-1][z] >= getRequirement(x,y,z)) &&
+		(z==0 || data.boughts[x][y][z-1] >= getRequirement(x,y,z))
 		) {
 		return true;
 	}
@@ -106,24 +133,35 @@ function canActivatePrestige(x,y,z) {
 function activatePrestige(x,y,z) {
 	//console.log(x,y,z);
 	if (canActivatePrestige(x,y,z)) {
-		data.coins = 0;
+		if(x+y+z==0)data.coins -= getRequirement(x,y,z);
 		for (let i = 0; i <= x; i++) {
 			for (let j = 0; j <= y; j++) {
 				for (let k = 0; k <= z; k++) {
-					if (!(i === x && j === y && k === z)) {
-						data.prestiges[i][j][k] = 0;
+					if (i+j+k+1==x+y+z) {
+						data.boughts[i][j][k] -= getRequirement(x,y,z);
 					}
 				}
 			}
 		}
 		data.prestiges[x][y][z]++;
+		data.boughts[x][y][z]++;
 		updateDescriptionsAndNames();
 	}
 	draw();
 }
 
 function update() {
-	data.coins += getGain();
+	data.coins += (getGain(0,0,0)+1)*(data.prestiges[0][0][0]+1);
+
+	for (let x = 0; x < 10; x++) {
+		for (let y = 0; y < 10; y++) {
+			for (let z = 0; z < 10; z++) {
+				data.prestiges[x][y][z] += getGain(x,y,z);
+			}
+		}
+	}
+
+
     resetCheck();
 	localStorage.OH_NO= JSON.stringify(data);
 }
@@ -135,7 +173,7 @@ function draw() {
 	for (let i = 0; i < 10; i++) {
 		for (let j = 0; j < 10; j++) {
 			let btn = document.getElementById("tier"+i+j);
-			btn.innerHTML = "Tier\n("+i+","+j+","+layer+")\nx"+data.prestiges[i][j][layer];
+			btn.innerHTML = "Tier\n("+i+","+j+","+layer+")\nx"+data.prestiges[i][j][layer]+"\nbought:"+data.boughts[i][j][layer];
 		}
 	}
 }
@@ -151,13 +189,13 @@ function updateDescriptionsAndNames() {
 					a[x][y] += "\r\n" + getRequirement(x,y,layer) + " coins";
 				}
 				if (x!==0) {
-					a[x][y] += "\r\n" + getRequirement(x,y,layer) +" of tier("+(x-1)+","+y+","+layer+")";
+					a[x][y] += "\r\n" + getRequirement(x,y,layer) +" boughts of tier("+(x-1)+","+y+","+layer+")";
 				}
 				if (y!==0) {
-					a[x][y] += "\r\n" + getRequirement(x,y,layer) +" of tier("+x+","+(y-1)+","+layer+")";
+					a[x][y] += "\r\n" + getRequirement(x,y,layer) +" boughts of tier("+x+","+(y-1)+","+layer+")";
 				}
 				if (layer!==0) {
-					a[x][y] += "\r\n" + getRequirement(x,y,layer) +" of tier("+x+","+y+","+(layer-1)+")";
+					a[x][y] += "\r\n" + getRequirement(x,y,layer) +" boughts of tier("+x+","+y+","+(layer-1)+")";
 				}
 			}
 		}
