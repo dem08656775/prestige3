@@ -1,7 +1,8 @@
+
 let layer = 0;
 
 let data = {
-	coins: 0,
+	coins: new Decimal(0),
 	prestiges: (()=>{
 		let a=[];
 		for (let x = 0; x < 10; x++) {
@@ -9,7 +10,7 @@ let data = {
 			for (let y = 0; y < 10; y++) {
 				a[x][y] = [];
 				for (let z = 0; z < 10; z++) {
-					a[x][y][z] = 0;
+					a[x][y][z] = new Decimal(0);
 				}
 			}
 		}
@@ -22,7 +23,20 @@ let data = {
 			for (let y = 0; y < 10; y++) {
 				a[x][y] = [];
 				for (let z = 0; z < 10; z++) {
-					a[x][y][z] = 0;
+					a[x][y][z] = new Decimal(0);
+				}
+			}
+		}
+		return a;
+	})(),
+	mboughts: (()=>{
+		let a=[];
+		for (let x = 0; x < 10; x++) {
+			a[x] = [];
+			for (let y = 0; y < 10; y++) {
+				a[x][y] = [];
+				for (let z = 0; z < 10; z++) {
+					a[x][y][z] = new Decimal(0);
 				}
 			}
 		}
@@ -97,69 +111,104 @@ function getPPBonus() {
 }
 
 function getGain(a,b,c) {
-	let gain = 1;
+	let gain = new Decimal(1);
 	for (let x = a; x < 10; x++) {
 		for (let y = b; y < 10; y++) {
 			for (let z = c; z < 10; z++) {
-				if(x+y+z!=a+b+c)gain *= data.prestiges[x][y][z]+1;
+				if(x+y+z!=a+b+c){
+					gain = gain.mul(data.prestiges[x][y][z].add(1));
+					gain = gain.mul(data.boughts[x][y][z].pow_base(x+2*y+3*z+1))
+					gain = gain.mul(data.mboughts[x][y][z].pow_base(x*y*z+1))
+				}
 			}
 		}
 	}
-	return (gain-1)*metaBonus*getPPBonus();
+	return gain.sub(1)
 }
 
 function getRequirement(x,y,z) {
 	if (x===0 && y===0 && z===0) {
-		return Math.floor(Math.pow(1.5,data.boughts[0][0][0])*10);
+		return data.boughts[0][0][0].pow_base(1.5).mul(10).floor();
 	} else {
-		return Math.pow((x+y+z+1),(data.boughts[x][y][z]+1));
+		return data.boughts[x][y][z].add(1).pow_base(0.01*x+0.1*y+z+1.5).floor();
 	}
 }
 
 function canActivatePrestige(x,y,z) {
 	if (x===0 && y===0 && z===0) {
-		return (data.coins >= getRequirement(x,y,z));
+		return (data.coins.gte(getRequirement(x,y,z)));
 	}
-	if (
-		(x==0 || data.boughts[x-1][y][z] >= getRequirement(x,y,z)) &&
-		(y==0 || data.boughts[x][y-1][z] >= getRequirement(x,y,z)) &&
-		(z==0 || data.boughts[x][y][z-1] >= getRequirement(x,y,z))
-		) {
-		return true;
-	}
+	let s = new Decimal(0)
+
+	if (x!=0) s = s.add(data.boughts[x-1][y][z]);
+	if (y!=0) s = s.add(data.boughts[x][y-1][z]);
+	if (z!=0) s = s.add(data.boughts[x][y][z-1]);
+
+		if(s.gte(getRequirement(x,y,z))){
+			activatePrestige(x,y,z,1)
+			return true;
+		}
+
 	return false;
 }
 
-function activatePrestige(x,y,z) {
+function activatePrestige(x,y,z,p) {
 	//console.log(x,y,z);
-	if (canActivatePrestige(x,y,z)) {
-		if(x+y+z==0)data.coins -= getRequirement(x,y,z);
-		for (let i = 0; i <= x; i++) {
-			for (let j = 0; j <= y; j++) {
-				for (let k = 0; k <= z; k++) {
-					if (i+j+k+1==x+y+z) {
-						data.boughts[i][j][k] -= getRequirement(x,y,z);
-					}
-				}
+	if (true) {
+
+		let cost = Decimal.sumGeometricSeries(p,getRequirement(x,y,z),0.01*x+0.1*y+z+1.5,0).floor()
+
+		if(x+y+z==0)data.coins = data.coins.sub(cost);
+		else{
+			if (x!=0) {
+				let sp = data.boughts[x-1][y][z].min(cost)
+				data.boughts[x-1][y][z] = data.boughts[x-1][y][z].sub(sp);
+				cost = cost.sub(sp)
+			}
+			if (y!=0) {
+				let sp = data.boughts[x][y-1][z].min(cost)
+				data.boughts[x][y-1][z] = data.boughts[x][y-1][z].sub(sp);
+				cost = cost.sub(sp)
+			}
+			if (z!=0) {
+				let sp = data.boughts[x][y][z-1].min(cost)
+				data.boughts[x][y][z-1] = data.boughts[x][y][z-1].sub(sp);
+				cost = cost.sub(sp)
 			}
 		}
-		data.prestiges[x][y][z]++;
-		data.boughts[x][y][z]++;
+		data.prestiges[x][y][z] = data.prestiges[x][y][z].add(p);
+		data.boughts[x][y][z] = data.boughts[x][y][z].add(p);
+		data.mboughts[x][y][z] = data.mboughts[x][y][z].max(data.boughts[x][y][z]);
 		updateDescriptionsAndNames();
+		draw();
+		return true;
 	}
 	draw();
+	return false;
 }
 
 function update() {
-	data.coins += (getGain(0,0,0)+1)*(data.prestiges[0][0][0]+1);
+	data.coins = data.coins.add((getGain(0,0,0).add(1)).mul(data.prestiges[0][0][0].add(1)));
 
 	for (let x = 0; x < 10; x++) {
 		for (let y = 0; y < 10; y++) {
 			for (let z = 0; z < 10; z++) {
-				data.prestiges[x][y][z] += getGain(x,y,z);
+
+				let s = new Decimal(0)
+
+				if (x!=0) s = s.add(data.boughts[x-1][y][z]);
+				if (y!=0) s = s.add(data.boughts[x][y-1][z]);
+				if (z!=0) s = s.add(data.boughts[x][y][z-1]);
+
+				if(x+y+z==0) s = data.coins;
+
+				let n = Decimal.affordGeometricSeries(s,getRequirement(x,y,z),0.01*x+0.1*y+z+1.5,0);
+				activatePrestige(x,y,z,n)
+				data.prestiges[x][y][z] = data.prestiges[x][y][z].add(getGain(x,y,z));
 			}
 		}
 	}
+
 
 
     resetCheck();
@@ -173,7 +222,7 @@ function draw() {
 	for (let i = 0; i < 10; i++) {
 		for (let j = 0; j < 10; j++) {
 			let btn = document.getElementById("tier"+i+j);
-			btn.innerHTML = "Tier\n("+i+","+j+","+layer+")\nx"+data.prestiges[i][j][layer]+"\nbought:"+data.boughts[i][j][layer];
+			btn.innerHTML = "Tier\n("+i+","+j+","+layer+")\nx"+data.prestiges[i][j][layer].toFixed(4)+"\nbought:"+data.boughts[i][j][layer]+"\nmbought:"+data.mboughts[i][j][layer];
 		}
 	}
 }
@@ -187,15 +236,17 @@ function updateDescriptionsAndNames() {
 				a[x][y] = "Tier("+x+","+y+","+layer+"): "+names[x]+names[y]+names[layer]+"prestige\r\nPrestige requirements:";
 				if (x===0 && y===0 && layer===0) {
 					a[x][y] += "\r\n" + getRequirement(x,y,layer) + " coins";
+				}else{
+					a[x][y] += "\r\n" + getRequirement(x,y,layer) + " boughts of";
 				}
 				if (x!==0) {
-					a[x][y] += "\r\n" + getRequirement(x,y,layer) +" boughts of tier("+(x-1)+","+y+","+layer+")";
+					a[x][y] += "\r\n" + " tier("+(x-1)+","+y+","+layer+")";
 				}
 				if (y!==0) {
-					a[x][y] += "\r\n" + getRequirement(x,y,layer) +" boughts of tier("+x+","+(y-1)+","+layer+")";
+					a[x][y] += "\r\n" + " tier("+x+","+(y-1)+","+layer+")";
 				}
 				if (layer!==0) {
-					a[x][y] += "\r\n" + getRequirement(x,y,layer) +" boughts of tier("+x+","+y+","+(layer-1)+")";
+					a[x][y] += "\r\n" + " tier("+x+","+y+","+(layer-1)+")";
 				}
 			}
 		}
@@ -205,7 +256,7 @@ function updateDescriptionsAndNames() {
 
 window.addEventListener("load",function () {
 	if (localStorage.OH_NO) {
-		data = JSON.parse(localStorage.OH_NO)
+		//data = JSON.parse(localStorage.OH_NO)
 	}
 	if (localStorage.META) {
 		metaBonus = JSON.parse(localStorage.META).multiForOthers;
